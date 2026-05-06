@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="hr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Statička analiza dinamike tipkanja</title>
+    <link rel="icon" type="image/png" href="/assets/Staticko.png?v=3">
+    <link rel="shortcut icon" type="image/png" href="/assets/Staticko.png?v=3">
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; margin: 0; background: #f4f6f8; color: #111827; }
+        main { max-width: 900px; margin: 40px auto; background: white; padding: 28px; border-radius: 18px; box-shadow: 0 10px 30px rgba(0,0,0,.08); }
+        h1 { margin-top: 0; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        label { display: block; font-weight: 700; margin-bottom: 6px; }
+        input { width: 100%; padding: 12px; border: 1px solid #cfd6df; border-radius: 10px; font-size: 16px; }
+        button { border: 0; padding: 12px 16px; border-radius: 10px; cursor: pointer; font-weight: 700; font-size: 15px; }
+        .primary { background: #111827; color: white; }
+        .secondary { background: #e5e7eb; color: #111827; }
+        .danger { background: #fee2e2; color: #991b1b; }
+        .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+        .box { background: #f9fafb; border: 1px solid #e5e7eb; padding: 16px; border-radius: 14px; margin-top: 20px; }
+        .keyword { font-family: Consolas, monospace; font-size: 24px; font-weight: 700; letter-spacing: 1px; }
+        #typingInput { font-family: Consolas, monospace; font-size: 22px; margin-top: 10px; }
+        #message { white-space: pre-line; line-height: 1.5; }
+        .ok { color: #047857; font-weight: 700; }
+        .bad { color: #b91c1c; font-weight: 700; }
+        .muted { color: #6b7280; }
+        @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } main { margin: 16px; } }
+    </style>
+</head>
+<body>
+<main>
+    <h1>Statička analiza dinamike tipkanja</h1>
+    <p class="muted">Upišite ključnu riječ točno kako je prikazana i završite unos tipkom Enter.</p>
+
+    <div class="grid">
+        <div>
+            <label for="ime">Ime korisnika</label>
+            <input id="ime" placeholder="npr. Marko" autocomplete="off">
+        </div>
+        <div>
+            <label>Ključna riječ</label>
+            <div class="keyword">{{ kljucna_rijec }}</div>
+        </div>
+    </div>
+
+    <div class="actions">
+        <button class="secondary" id="registerBtn">Registracija ({{ broj_ponavljanja }} uzorka)</button>
+        <button class="primary" id="loginBtn">Prijava (1 uzorak)</button>
+        <button class="danger" id="resetBtn">Prekini unos</button>
+    </div>
+
+    <div class="box">
+        <label for="typingInput">Polje za tipkanje</label>
+        <input id="typingInput" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" disabled>
+        <p id="message">Kliknite registraciju ili prijavu.</p>
+    </div>
+</main>
+
+<script>
+const KLJUCNA_RIJEC = "{{ kljucna_rijec }}";
+const BROJ_PONAVLJANJA = Number("{{ broj_ponavljanja }}");
+
+const imeInput = document.getElementById("ime");
+const typingInput = document.getElementById("typingInput");
+const message = document.getElementById("message");
+const registerBtn = document.getElementById("registerBtn");
+const loginBtn = document.getElementById("loginBtn");
+const resetBtn = document.getElementById("resetBtn");
+
+let mode = null;
+let targetSamples = 0;
+let samples = [];
+let events = [];
+let pressed = {};
+let recording = false;
+
+function setMessage(text, cls = "") {
+    message.className = cls;
+    message.textContent = text;
+}
+
+function nowSeconds() {
+    return performance.now() / 1000;
+}
+
+function keyName(e) {
+    if (e.key === ".") return "period";
+    if (e.key === "5") return "five";
+
+    if (e.code === "KeyR") return "Shift.r";
+
+    const lower = e.key.toLowerCase();
+    if (["t", "i", "e", "o", "a", "n", "l"].includes(lower)) return lower;
+
+    return null;
+}
+
+function startRecording(selectedMode) {
+    const ime = imeInput.value.trim();
+    if (!ime) {
+        setMessage("Prvo unesite ime korisnika.", "bad");
+        imeInput.focus();
+        return;
+    }
+
+    mode = selectedMode;
+    targetSamples = selectedMode === "register" ? BROJ_PONAVLJANJA : 1;
+    samples = [];
+    prepareNextSample();
+}
+
+function prepareNextSample() {
+    events = [];
+    pressed = {};
+    recording = true;
+    typingInput.disabled = false;
+    typingInput.value = "";
+    typingInput.focus();
+
+    const label = mode === "register" ? "Registracija" : "Prijava";
+    setMessage(`${label}: uzorak ${samples.length + 1}/${targetSamples}. Upišite ${KLJUCNA_RIJEC} i pritisnite Enter.`);
+}
+
+function stopRecording() {
+    recording = false;
+    events = [];
+    pressed = {};
+    typingInput.value = "";
+    typingInput.disabled = true;
+    setMessage("Unos je prekinut.");
+}
+
+function resetBadSample(text) {
+    setMessage(text + "\nUzorak je odbačen. Krenite ponovno.", "bad");
+    events = [];
+    pressed = {};
+    typingInput.value = "";
+    typingInput.focus();
+}
+
+function appendEvent(key, releaseTime) {
+    if (pressed[key] === undefined) return;
+    events.push({ key, press: pressed[key], release: releaseTime });
+    delete pressed[key];
+}
+
+async function finishSample() {
+    recording = false;
+    const typedText = typingInput.value;
+
+    if (typedText !== KLJUCNA_RIJEC) {
+        resetBadSample(`Uneseno je '${typedText}', a treba '${KLJUCNA_RIJEC}'.`);
+        recording = true;
+        return;
+    }
+
+    samples.push({ typedText, events });
+
+    if (samples.length < targetSamples) {
+        setMessage(`Uzorak ${samples.length}/${targetSamples} je spremljen. Priprema sljedećeg uzorka...`, "ok");
+        setTimeout(prepareNextSample, 700);
+        return;
+    }
+
+    typingInput.disabled = true;
+    await sendSamples();
+}
+
+async function sendSamples() {
+    const ime = imeInput.value.trim();
+    const url = mode === "register" ? "/api/register" : "/api/login";
+    const body = mode === "register"
+        ? { ime, samples, overwrite: true }
+        : { ime, sample: samples[0] };
+
+    try {
+        const response = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body)
+        });
+        const data = await response.json();
+
+        if (!response.ok || !data.ok) {
+            setMessage(data.poruka || "Dogodila se greška.", "bad");
+            return;
+        }
+
+        if (mode === "login") {
+            const cls = data.odobren ? "ok" : "bad";
+            setMessage(`${data.poruka}\nEuklidska udaljenost: ${data.udaljenost}\nPrag: ${data.prag}`, cls);
+        } else {
+            setMessage(data.poruka, "ok");
+        }
+    } catch (err) {
+        setMessage("Greška pri komunikaciji s poslužiteljem: " + err.message, "bad");
+    }
+}
+
+typingInput.addEventListener("keydown", (e) => {
+    if (!recording) return;
+
+    if (e.ctrlKey || e.altKey || e.metaKey) {
+        e.preventDefault();
+        resetBadSample("Kombinacije tipki nisu dopuštene.");
+        return;
+    }
+
+    if (e.key === "Backspace" || e.key === "Delete") {
+        e.preventDefault();
+        resetBadSample("Brisanje nije dopušteno u ovom prototipu.");
+        return;
+    }
+
+    const t = nowSeconds();
+
+    if (e.key === "Enter") {
+        e.preventDefault();
+        if (pressed["Return"] === undefined) pressed["Return"] = t;
+        return;
+    }
+
+    if (e.key === "Shift") return;
+
+    const k = keyName(e);
+    if (!k) return;
+
+    if (pressed[k] === undefined) pressed[k] = t;
+});
+
+typingInput.addEventListener("keyup", (e) => {
+    if (!recording) return;
+    const t = nowSeconds();
+
+    if (e.key === "Enter") {
+        e.preventDefault();
+        appendEvent("Return", t);
+        finishSample();
+        return;
+    }
+
+    if (e.key === "Shift") return;
+
+    const k = keyName(e);
+    if (k) appendEvent(k, t);
+});
+
+typingInput.addEventListener("paste", (e) => {
+    e.preventDefault();
+    resetBadSample("Lijepljenje teksta nije dopušteno.");
+});
+
+registerBtn.addEventListener("click", () => startRecording("register"));
+loginBtn.addEventListener("click", () => startRecording("login"));
+resetBtn.addEventListener("click", stopRecording);
+</script>
+</body>
+</html>
