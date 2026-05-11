@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Dynamic Keystroke Authentication</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <main class="container">
+        <section class="card">
+            <h1>Dynamic Keystroke Authentication</h1>
+
+            <p>
+                This version uses free text. There is no fixed password phrase.
+                Type naturally and the system compares typing rhythm.
+            </p>
+
+            <div class="meta">
+                Registration samples: <strong>{{ registration_samples }}</strong><br>
+                Minimum characters per sample: <strong>{{ min_chars }}</strong><br>
+                Distance threshold: <strong>{{ threshold }}</strong>
+            </div>
+
+            <label for="username">Username</label>
+            <input id="username" type="text" autocomplete="off" placeholder="Example: Antonio">
+
+            <div class="buttons">
+                <button id="registerButton">Start registration</button>
+                <button id="loginButton">Start login</button>
+                <button id="resetButton">Reset</button>
+            </div>
+
+            <hr>
+
+            <label for="typingArea">Free text</label>
+            <textarea
+                id="typingArea"
+                disabled
+                autocomplete="off"
+                autocorrect="off"
+                autocapitalize="off"
+                spellcheck="false"
+                placeholder="Start registration or login first, then type here."
+            ></textarea>
+
+            <div class="buttons">
+                <button id="saveSampleButton" disabled>Save current sample</button>
+            </div>
+
+            <div id="statusBox" class="status info">
+                Start registration or login.
+            </div>
+        </section>
+    </main>
+
+    <script>
+        window.APP_CONFIG = {
+            registrationSamples: { registration_samples },
+            minChars: { min_chars }
+        };
+    </script>
+
+    <script src="{{ url_for('static', filename='js/typing.js') }}"></script>
+
+</body>
+</html>
