@@ -152,22 +152,28 @@ Sample ${nextSample}/${registrationSamples}.`,
     }
 }
 
-async function postJSON(url, body) {
-    const response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
-    });
-    return response.json();
-}
-
 async function sendRegistration() {
     disableTyping();
 
-    const data = await postJSON("/api/register", { username: getUsername(), samples });
+    const response = await fetch("/api/register", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            username: getUsername(),
+            samples: samples
+        })
+    });
+
+    const data = await response.json();
 
     if (data.ok) {
-        setStatus(`${data.message}\nFeature count: ${data.feature_count}`, "success");
+        setStatus(
+            `${data.message}
+Feature count: ${data.feature_count}`,
+            "success"
+        );
     } else {
         setStatus(data.message, "error");
     }
@@ -176,7 +182,18 @@ async function sendRegistration() {
 async function sendLogin(sample) {
     disableTyping();
 
-    const data = await postJSON("/api/login", { username: getUsername(), sample });
+    const response = await fetch("/api/login", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            username: getUsername(),
+            sample: sample
+        })
+    });
+
+    const data = await response.json();
 
     if (!data.ok) {
         setStatus(data.message, "error");
@@ -184,8 +201,11 @@ async function sendLogin(sample) {
     }
 
     const type = data.approved ? "success" : "error";
+
     setStatus(
-        `${data.message}\nDistance: ${data.distance}\nThreshold: ${data.threshold}`,
+        `${data.message}
+Distance: ${data.distance}
+Threshold: ${data.threshold}`,
         type
     );
 }
